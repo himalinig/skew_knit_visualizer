@@ -1,4 +1,4 @@
-const knitout_example = 
+const knitout_example_small = 
 `;!knitout-2
 ;;Carriers: 1 2 3 4 5 6 7 8 9 10
 ;;Machine: SWGN2
@@ -8,9 +8,9 @@ tuck - f6 3 ;!source:23
 tuck - f4 3 ;!source:23
 tuck - f2 3 ;!source:23
 tuck + b1 3 ;!source:31
-tuck + b3 3 ;!source:31
+
 `
-const knitout_example_full = 
+const knitout_example = 
 `;!knitout-2
 ;;Carriers: 1 2 3 4 5 6 7 8 9 10
 ;;Machine: SWGN2

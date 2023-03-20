@@ -3,6 +3,7 @@
 // From here in I use P2,P3 to create 2D and 3D points
 const P3 = (x = 0, y = 0, z = 0) => ({x,y,z});
 const P2 = (x = 0, y = 0) => ({ x, y});
+const pointAverage = (p1, p2) => ({x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 , z: (p1.z + p2.z) / 2});
 const D2R = (ang) => (ang-90) * (Math.PI/180 );
 const Ang2Vec = (ang,len = 1) => P2(Math.cos(D2R(ang)) * len,Math.sin(D2R(ang)) * len);
 const projTypes = {
@@ -52,9 +53,9 @@ class Needle {
         this.x = bed;
         this.z = 0;
         this.topLeft = P3(this.x, this.y, this.z);
-        this.bottomLeft = P3(this.x, this.y + 1, this.z);
-        this.bottomRight = P3(this.x + 1, this.y + 1, this.z);
-        this.topRight = P3(this.x + 1, this.y, this.z);
+        this.bottomLeft = P3(this.x + 1, this.y, this.z);
+        this.bottomRight = P3(this.x + 1, this.y - 1, this.z);
+        this.topRight = P3(this.x, this.y - 1, this.z);
         this.cells = [];
         this.newCellOps = [Knit];
         this.additionalOps = [Tuck];
@@ -70,7 +71,7 @@ class Needle {
             var makeNewCell = this.newCellOps.some(newOp => op instanceof newOp);
             var addToOldCell = this.additionalOps.some(additionalOp => op instanceof additionalOp)
             if(makeNewCell){
-                var newCell = new NeedleCell(op, this.x  + 0.5, this.y, 0);
+                var newCell = new NeedleCell(op, this.x  + 0.5, this.y, this.z);
                 this.cells.forEach(cell => cell.pushDown());
                 this.cells.push(newCell);
                 retCell = newCell;
@@ -84,7 +85,7 @@ class Needle {
         return retCell;
     }
     render(grid){
-        grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight,this.y.toString());
+        grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight, this.y.toString());
     }
     renderStack(grid){
         this.cells.forEach(cell => cell.render(grid));
@@ -93,26 +94,31 @@ class Needle {
 }
 class NeedleCell {
     constructor(op, x, y, z){
+        this.ops = [op];
         this.opNames = op.getName();
-        this.topLeft = P3(x, y, z);
-        this.bottomLeft = P3(x, y + 0.8, z);
-        this.bottomRight = P3(x, y + 0.8, z + 1);
-        this.topRight = P3(x, y, z + 1);
-        this.getLeftPort = () => P3(this.bottomRight.x, this.bottomRight.y, this.bottomRight.z - 0.4);
-        this.getRightPort = () => P3(this.topLeft.x, this.topLeft.y, this.topLeft.z + 0.5);
+        
+        this.topLeft = P3(x, y - 0.1, z - 0.1);
+        this.bottomLeft = P3(x, y - 0.1, z - 0.9);
+        this.bottomRight = P3(x, y - 0.9, z - 0.9);
+        this.topRight = P3(x, y - 0.9, z - 0.1);
+        this.getLeftPort = () => P3(this.topLeft.x, this.topLeft.y, this.topLeft.z - 0.4);
+        this.getRightPort = () => P3(this.topRight.x, this.topRight.y, this.topRight.z - 0.5);
     }
     addOp(op){
         this.opNames += ", " + op.getName(); 
     }
     pushDown(){
-        this.topLeft.z -= 1;
-        this.bottomLeft.z -= 1;
         this.bottomRight.z -= 1;
+        this.bottomLeft.z -= 1;
+        this.topLeft.z -= 1;
         this.topRight.z -= 1;
     }
    
     render(grid){
-        grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight, this.opNames);
+        grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight,  this.opNames);
+        var lines = this.ops.map(op => op.getStroke(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight,));
+        var temp = lines.flat(1);
+        temp.map(line => grid.addLine(line))
     }
 
 }
@@ -135,7 +141,7 @@ class Carrier {
         return this.carrierLocation;
     } 
     render(grid){
-        this.yarnCrossings.forEach(crossing => grid.addLine(crossing.p1(), crossing.p2()));
+        this.yarnCrossings.forEach(crossing => grid.addLine([crossing.p1(), crossing.p2()]));
     }
 }
 class Machine {
@@ -279,6 +285,40 @@ class Tuck extends Operator {
         this.needle = needle;
         this.carrierSet = carrierSet;
     }
+    getStroke(topLeft, bottomLeft, bottomRight, topRight){
+        var width = Math.abs(bottomRight.y - bottomLeft.y);
+        var height = Math.abs(bottomRight.z - topRight.z);
+        var wGap = width * 0.2;
+        var hGap = height * 0.3;
+        var midTop = pointAverage(topLeft, topRight);
+        var midLeft = pointAverage(topLeft, bottomLeft);
+        var midRight = pointAverage(bottomRight, topRight);
+
+        var midTopLeft = {
+            x: midTop.x,
+            y: midTop.y + wGap,
+            z: midTop.z
+        }
+        var midTopRight = {
+            x: midTop.x,
+            y: midTop.y - wGap,
+            z: midTop.z
+        }
+        var innerTopLeft = {
+            x: topLeft.x, 
+            y: topLeft.y - wGap,
+            z: topLeft.z - hGap,
+        }
+        var innerTopRight = {
+            x: topRight.x, 
+            y: topRight.y + wGap,
+            z: topRight.z - hGap,
+        }
+
+        var vertices = [[midLeft,innerTopLeft,  midTopLeft],[midRight, innerTopRight, midTopRight]];
+        // var vertices = [[midRight, innerTopRight, midTopRight]];
+        return vertices;
+    }
 }
 class Knit extends Operator {
     constructor(direction, needle, carrierSet) {
@@ -286,6 +326,100 @@ class Knit extends Operator {
         this.direction = direction;
         this.needle = needle;
         this.carrierSet = carrierSet;
+    }
+
+    getStroke(topLeft, bottomLeft, bottomRight, topRight){
+        var width = Math.abs(bottomRight.y - bottomLeft.y);
+        var height = Math.abs(bottomRight.z - topRight.z);
+        var wGap = width * 0.15;
+        var hGap = height * 0.15;
+        var midBottom = pointAverage(bottomLeft, bottomRight);
+        var midTop = pointAverage(topLeft, topRight);
+        var midLeft = pointAverage(topLeft, bottomLeft);
+        var midRight = pointAverage(bottomRight, topRight);
+        var midTopLeft = {
+            x: midTop.x,
+            y: midTop.y + wGap,
+            z: midTop.z
+        }
+        var midTopRight = {
+            x: midTop.x,
+            y: midTop.y - wGap,
+            z: midTop.z
+        }
+    
+        var midBottomLeft = {
+            x: midBottom.x,
+            y: midBottom.y + wGap,
+            z: midBottom.z
+        }
+        var midBottomRight = {
+            x: midBottom.x,
+            y: midBottom.y - wGap,
+            z: midBottom.z
+        }
+        var innerTopLeft = {
+            x: topLeft.x, 
+            y: topLeft.y - wGap,
+            z: topLeft.z - hGap,
+        }
+        var innerTopRight = {
+            x: topRight.x, 
+            y: topRight.y + wGap,
+            z: topRight.z - hGap,
+        }
+        var innerBottomLeft = {
+            x: bottomLeft.x, 
+            y: bottomLeft.y - wGap,
+            z: bottomLeft.z + hGap,
+        }
+        var innerBottomRight = {
+            x: bottomRight.x, 
+            y: bottomRight.y + wGap,
+            z: bottomRight.z + hGap,
+        }
+        var leftInnerCorner = {
+            x: midBottomLeft.x,
+            y: midBottomLeft.y,
+            z: innerBottomLeft.z,
+
+        }
+        var rightInnerCorner = {
+            x: midBottomRight.x,
+            y: midBottomRight.y,
+            z: innerBottomRight.z,
+            
+        }
+        var topLeftInnerCorner = {
+            x: midLeft.x,
+            y: midTopLeft.y,
+            z: midLeft.z,
+
+        }
+        var topRightInnerCorner = {
+            x: midRight.x,
+            y: midTopRight.y,
+            z: midRight.z,
+
+        }
+        var leftTuck = [
+            midLeft,
+            topLeftInnerCorner,
+            midTopLeft
+        ]
+        var rightTuck = [
+            midRight, 
+            topRightInnerCorner,
+            midTopRight
+        ]
+
+        var vertices = [
+            [midBottomLeft, leftInnerCorner, innerBottomLeft, innerTopLeft, innerTopRight, innerBottomRight, rightInnerCorner, midBottomRight],
+            leftTuck,
+            rightTuck
+        ];
+        return vertices;
+
     }
 }
 
@@ -298,14 +432,15 @@ class Grid {
         this.squaresToRender = [];
         this.axes = [];
         this.linesToRender = [];
+        this.color = "#" + Math.floor(Math.random()*16777215).toString(16);
  
 
     }
-    addLine(p1, p2){
+    addLine(vertices){
 
         var randomColor = "#" + Math.floor(Math.random()*16777215).toString(16);
         this.linesToRender.push({
-            vertices: [P3(p1.x * this.unitWidth, p1.y* this.unitWidth, p1.z* this.unitWidth), P3(p2.x* this.unitWidth, p2.y* this.unitWidth, p2.z* this.unitWidth)],
+            vertices: vertices.map(point => P3(point.x * this.unitWidth, point.y* this.unitWidth, point.z* this.unitWidth)),
             fill: randomColor,
             strokeStyle: "#fff",
         })
@@ -336,25 +471,32 @@ class Grid {
             this.ctx.lineWidth = 1;
             this.ctx.beginPath();
             const projVertices = square.vertices.map(vertex => axoProjMat.project(vertex));
-            projVertices.forEach(vertex => this.ctx.lineTo(vertex.x , vertex.y));
+            projVertices.forEach((vertex, index) => {
+                this.ctx.lineTo(vertex.x , vertex.y)
+                // this.ctx.strokeText(index.toString(), vertex.x , vertex.y)
+            });
             
             this.ctx.stroke();
             this.ctx.fill();
             this.ctx.globalAlpha = 1.0;
-            this.ctx.strokeText(square.text, projVertices[1].x, projVertices[1].y);
+            // this.ctx.strokeText(square.text, projVertices[1].x, projVertices[1].y);
 
             
         });
 
         this.linesToRender.forEach((line, index) => {
+            // this.ctx.globalAlpha = 0.0;
             this.ctx.strokeStyle = line.fill;
             this.ctx.lineWidth = 1;
             this.ctx.beginPath();
             const projVertices = line.vertices.map(vertex => axoProjMat.project(vertex));
-            projVertices.forEach(vertex => this.ctx.lineTo(vertex.x , vertex.y));
-            this.ctx.strokeText(index.toString(), projVertices[0].x, projVertices[0].y);
-            this.ctx.stroke();
-            this.ctx.fill();
+            projVertices.forEach((vertex, index) => {
+                // this.ctx.arc(vertex.x , vertex.y, 2, 0, 2 * Math.PI, false)
+                this.ctx.lineTo(vertex.x , vertex.y, 2, 0, 2 * Math.PI, false)
+                // this.ctx.strokeText(index.toString(), vertex.x, vertex.y);
+            });
+            // ctx.closePath();
+            ctx.stroke();
         })
 
     }
