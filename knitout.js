@@ -182,7 +182,6 @@ knit + b5 3 ;!source:132
 knit + b6 3 ;!source:132
 knit + b7 3 ;!source:132
 knit + b8 3 ;!source:132
-outhook 3  ;!source:136
 `
 
 

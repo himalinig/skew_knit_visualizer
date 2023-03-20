@@ -60,37 +60,28 @@ class Needle {
         this.additionalOps = [Tuck];
         
     }
-    addOp(op, getPrevPort){
-        console.log(getPrevPort);
+    addOp(op){
+        var retCell = null;
         if(this.cells.length == 0){
             var cell = new NeedleCell(op, this.x + 0.5, this.y, this.z);
-            cell.setPorts(op.direction, getPrevPort);
-            getPrevPort = cell.getLeavingPort;
-
+            retCell = cell;
             this.cells.push(cell);
         } else {
             var makeNewCell = this.newCellOps.some(newOp => op instanceof newOp);
             var addToOldCell = this.additionalOps.some(additionalOp => op instanceof additionalOp)
             if(makeNewCell){
                 var newCell = new NeedleCell(op, this.x  + 0.5, this.y, 0);
-                newCell.setPorts(op.direction, getPrevPort);
-                getPrevPort = newCell.getLeavingPort;
-              
-
                 this.cells.forEach(cell => cell.pushDown());
                 this.cells.push(newCell);
+                retCell = newCell;
             } else if(addToOldCell){
                 var oldCell = this.cells.pop();
                 oldCell.addOp(op);
-                oldCell.setPorts(op.direction, getPrevPort);
-                getPrevPort = oldCell.getLeavingPort;
                 this.cells.push(oldCell);
+                retCell = oldCell;
             }
-     
         }
-        // this.cells.forEach(cell => console.log(cell.getEnteringPort, cell.getLeavingPort));
-        console.log(getPrevPort);
-        return getPrevPort;
+        return retCell;
     }
     render(grid){
         grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight,this.y.toString());
@@ -104,13 +95,11 @@ class NeedleCell {
     constructor(op, x, y, z){
         this.opNames = op.getName();
         this.topLeft = P3(x, y, z);
-        this.bottomLeft = P3(x, y + 1, z);
-        this.bottomRight = P3(x, y + 1, z + 1);
+        this.bottomLeft = P3(x, y + 0.8, z);
+        this.bottomRight = P3(x, y + 0.8, z + 1);
         this.topRight = P3(x, y, z + 1);
-        this.getEnteringPort = null;
-        this.getLeavingPort = null;
-        this.getPrevPort = null;
-
+        this.getLeftPort = () => P3(this.bottomRight.x, this.bottomRight.y, this.bottomRight.z - 0.4);
+        this.getRightPort = () => P3(this.topLeft.x, this.topLeft.y, this.topLeft.z + 0.5);
     }
     addOp(op){
         this.opNames += ", " + op.getName(); 
@@ -121,34 +110,38 @@ class NeedleCell {
         this.bottomRight.z -= 1;
         this.topRight.z -= 1;
     }
-    leftPort(){
-        return P3(this.topLeft.x, this.topLeft.y, this.topLeft.z + 0.5);
-    }
-    rightPort(){
-        return P3(this.topLeft.x, this.topLeft.y + 1, this.topLeft.z + 0.5);
-    }
-    setPorts(dir, getPrevPort){
-        this.getPrevPort = getPrevPort;
-        if(dir == '+'){
-            this.getEnteringPort = this.leftPort;
-            this.getLeavingPort = this.rightPort;
-            return;
-        }
-        this.getEnteringPort = this.rightPort;
-        this.getLeavingPort = this.leftPort;
-    }
+   
     render(grid){
         grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight, this.opNames);
-        console.log(this.getEnteringPort, this.getPrevPort);
-        if(this.getEnteringPort != null && this.getPrevPort != null){
-            grid.addLine(this.getPrevPort(), this.getEnteringPort());
-        }
     }
 
+}
+class Carrier {
+    constructor(){
+        const origin = () => P3(0, 0, 0);
+        this.carrierLocation = origin;
+        this.yarnCrossings = [];
+    }
+    addCrossing(p1, p2){
+        this.yarnCrossings.push({
+            p1: p1, 
+            p2: p2
+        });
+    }
+    updateCarrierLocation(location){
+        this.carrierLocation = location;
+    }
+    getCarrierLocation(){
+        return this.carrierLocation;
+    } 
+    render(grid){
+        this.yarnCrossings.forEach(crossing => grid.addLine(crossing.p1(), crossing.p2()));
+    }
 }
 class Machine {
     constructor(ctx){
         this.ctx = ctx;
+        this.grid = new Grid(this.ctx);
         this.carriers = [];
         this.defaultStyles = [];
         this.ops = [];
@@ -158,80 +151,85 @@ class Machine {
 
     }
     setCarriers (carriers){
+        return;
       
-        console.assert(this.carriers.length === 0, "Shouldn't set carriers twice.");
+        // console.assert(this.carriers.length === 0, "Shouldn't set carriers twice.");
 
-        var colors = [
-            {color: '#ff4d00'},
-            {color: '#00b2ff'},
-            {color: '#ffe500'},
-            {color: '#0019ff'},
-            {color: '#80ff00'},
-            {color: '#8000ff'},
-            {color: '#00ff19'},
-            {color: '#ff00e6'},
-            {color: '#00ffb3'},
-            {color: '#ff004d'},
-        ]
+        // var colors = [
+        //     {color: '#ff4d00'},
+        //     {color: '#00b2ff'},
+        //     {color: '#ffe500'},
+        //     {color: '#0019ff'},
+        //     {color: '#80ff00'},
+        //     {color: '#8000ff'},
+        //     {color: '#00ff19'},
+        //     {color: '#ff00e6'},
+        //     {color: '#00ffb3'},
+        //     {color: '#ff004d'},
+        // ]
 
-        carriers.forEach(function(c,ci){
-            this.carriers.push({name:c, index:ci});
-            this.styles[c] = colors[ci];
-        }, this);
-        this.defaultStyles = this.styles;
+        // carriers.forEach(function(c,ci){
+        //     this.carriers.push({name:c, index:ci});
+        //     this.styles[c] = colors[ci];
+        // }, this);
+        // this.defaultStyles = this.styles;
       
     }
     addOP(op) {
         this.ops.push(op);
     }
     runMachine(){
-        
 
         for(var i = 0; i < this.ops.length; i++){
             var op = this.ops[i];
             if(op.needleOp){
                 if(op.needle.bed === 'f' || op.needle.bed === 'fs'){
                 
-                    this.frontbed[op.needle.number] = new Needle(op.needle.number, -0.25);
+                    this.frontbed[op.needle.number] = new Needle(op.needle.number, 0);
 
                 } else{
                     this.backbed[op.needle.number] = new Needle(op.needle.number, -1);
                 }
             }
         }
-        var getPrevPort = null;
+        var carrier = new Carrier(this.ctx, this.grid);
+        var cell = null;
         for(var i = 0; i < this.ops.length; i++){
             var op = this.ops[i];
             
             if(op.needleOp){
-     
                 if(op.needle.bed === 'f' || op.needle.bed === 'fs'){
-                    getPrevPort = this.frontbed[op.needle.number].addOp(op,getPrevPort );
-                    
-            
+                    cell = this.frontbed[op.needle.number].addOp(op );
                 }
                 else{
-                    getPrevPort = this.backbed[op.needle.number].addOp(op, getPrevPort);
-                    
+                    cell = this.backbed[op.needle.number].addOp(op);
+                }
+                if(op.direction == '-'){
+                    carrier.addCrossing(carrier.getCarrierLocation(), cell.getLeftPort);
+                    carrier.updateCarrierLocation(cell.getRightPort);
+                } else {
+                    carrier.addCrossing(carrier.getCarrierLocation(), cell.getRightPort);
+                    carrier.updateCarrierLocation(cell.getLeftPort);
+
                 }
             }
             
 
         }
+        this.carriers.push(carrier);
 
     }
     renderMachine(){
-        var grid = new Grid(this.ctx);
+        this.carriers.forEach(carrier => carrier.render(this.grid));
         for (let needle in this.frontbed) {
-            this.frontbed[needle].render(grid);
-            this.frontbed[needle].renderStack(grid);
+            this.frontbed[needle].render(this.grid);
+            this.frontbed[needle].renderStack(this.grid);
         }
         for (let needle in this.backbed) {
-            this.backbed[needle].render(grid);
-            this.backbed[needle].renderStack(grid);
-
+            this.backbed[needle].render(this.grid);
+            this.backbed[needle].renderStack(this.grid);
         }
-        grid.render();
+        this.grid.render();
     }
 
 }
@@ -300,8 +298,7 @@ class Grid {
         this.squaresToRender = [];
         this.axes = [];
         this.linesToRender = [];
-        this.addAxes();
-        
+ 
 
     }
     addLine(p1, p2){
@@ -313,30 +310,9 @@ class Grid {
             strokeStyle: "#fff",
         })
     }
-    addAxes(){
-        var randomColor = "#" + Math.floor(Math.random()*16777215).toString(16);
-        this.axes.push({
-            vertices: [P3(0, 0, 0),P3(10 * this.unitWidth, 0, 0) ],
-            fill: randomColor,
-            strokeStyle: "#fff",
-            text: text,
-        });
-        this.axes.push({
-            vertices: [P3(0, 0, 0),P3(0,10 * this.unitWidth, 0) ],
-            fill: randomColor,
-            strokeStyle: randomColor,
-            text: text,
-        });
-        this.axes.push({
-            vertices: [P3(0, 0, 0),P3(0,0,10 * this.unitWidth) ],
-            fill: randomColor,
-            strokeStyle: "#fff",
-            text: text,
-        });
-
-    }
+    
    
-    Rect(topLeft, bottomLeft, bottomRight, topRight, text="mom"){
+    Rect(topLeft, bottomLeft, bottomRight, topRight, text="default"){
         const scalePoint = (point) => ({x: point.x * this.unitWidth,y: point.y * this.unitWidth,z: point.z * this.unitWidth});
         
         var randomColor = "#" + Math.floor(Math.random()*16777215).toString(16);
@@ -366,44 +342,19 @@ class Grid {
             this.ctx.fill();
             this.ctx.globalAlpha = 1.0;
             this.ctx.strokeText(square.text, projVertices[1].x, projVertices[1].y);
-            // for(var i = 0; i < projVertices.length; i++){
-            //     const vertexText = square.vertices[i]
-            //     const vertex = projVertices[i];
-            //     this.ctx.strokeText(Math.ceil(vertexText.x).toString() + "," + Math.ceil(vertexText.y).toString(), vertex.x , vertex.y);
 
-            // }
-           
             
         });
-        this.axes.forEach(axes => {
-            this.ctx.strokeStyle = axes.fill;
-            this.ctx.lineWidth = 2;
-            this.ctx.beginPath();
-            const projVertices = axes.vertices.map(vertex => axoProjMat.project(vertex));
-            projVertices.forEach(vertex => this.ctx.lineTo(vertex.x , vertex.y));
-            this.ctx.stroke();
-            this.ctx.fill();
-            this.ctx.strokeText(axes.text, projVertices[0].x, projVertices[0].y);
-            for(var i = 0; i < projVertices.length; i++){
-                const vertexText = axes.vertices[i]
-                const vertex = projVertices[i];
-                this.ctx.strokeText(Math.ceil(vertexText.x).toString() + "," + Math.ceil(vertexText.y).toString(), vertex.x , vertex.y);
-            }
-        })
-        this.linesToRender.forEach(line => {
+
+        this.linesToRender.forEach((line, index) => {
             this.ctx.strokeStyle = line.fill;
-            this.ctx.lineWidth = 2;
+            this.ctx.lineWidth = 1;
             this.ctx.beginPath();
             const projVertices = line.vertices.map(vertex => axoProjMat.project(vertex));
             projVertices.forEach(vertex => this.ctx.lineTo(vertex.x , vertex.y));
+            this.ctx.strokeText(index.toString(), projVertices[0].x, projVertices[0].y);
             this.ctx.stroke();
             this.ctx.fill();
-            // this.ctx.strokeText(line.text, projVertices[0].x, projVertices[0].y);
-            for(var i = 0; i < projVertices.length; i++){
-                // const vertexText = line.vertices[i]
-                const vertex = projVertices[i];
-                // this.ctx.strokeText(Math.ceil(vertexText.x).toString() + "," + Math.ceil(vertexText.y).toString(), vertex.x , vertex.y);
-            }
         })
 
     }
