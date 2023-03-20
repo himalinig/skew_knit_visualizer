@@ -1,6 +1,6 @@
-
-
 // From here in I use P2,P3 to create 2D and 3D points
+const LIGHTCOLOR = "#07b324"
+const DARKCOLOR = "#025c11"
 const P3 = (x = 0, y = 0, z = 0) => ({x,y,z});
 const P2 = (x = 0, y = 0) => ({ x, y});
 const pointAverage = (p1, p2) => ({x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 , z: (p1.z + p2.z) / 2});
@@ -48,9 +48,10 @@ axoProjMat.setProjection("Isometric");
 
 
 class Needle {
-    constructor(number, bed){
+    constructor(number, bed, color=null){
         this.y = number;
         this.x = bed;
+        this.color = color;
         this.z = 0;
         this.topLeft = P3(this.x, this.y, this.z);
         this.bottomLeft = P3(this.x + 1, this.y, this.z);
@@ -64,14 +65,14 @@ class Needle {
     addOp(op){
         var retCell = null;
         if(this.cells.length == 0){
-            var cell = new NeedleCell(op, this.x + 0.5, this.y, this.z);
+            var cell = new NeedleCell(op, this.x + 0.5, this.y, this.z, this.color);
             retCell = cell;
             this.cells.push(cell);
         } else {
             var makeNewCell = this.newCellOps.some(newOp => op instanceof newOp);
             var addToOldCell = this.additionalOps.some(additionalOp => op instanceof additionalOp)
             if(makeNewCell){
-                var newCell = new NeedleCell(op, this.x  + 0.5, this.y, this.z);
+                var newCell = new NeedleCell(op, this.x  + 0.5, this.y, this.z, this.color);
                 this.cells.forEach(cell => cell.pushDown());
                 this.cells.push(newCell);
                 retCell = newCell;
@@ -85,7 +86,7 @@ class Needle {
         return retCell;
     }
     render(grid){
-        grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight, this.y.toString());
+        grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight, this.y.toString(), this.color);
     }
     renderStack(grid){
         this.cells.forEach(cell => cell.render(grid));
@@ -93,15 +94,15 @@ class Needle {
     }
 }
 class NeedleCell {
-    constructor(op, x, y, z){
+    constructor(op, x, y, z, color){
         this.ops = [op];
         this.opNames = op.getName();
-        
-        this.topLeft = P3(x, y - 0.1, z - 0.1);
-        this.bottomLeft = P3(x, y - 0.1, z - 0.9);
-        this.bottomRight = P3(x, y - 0.9, z - 0.9);
-        this.topRight = P3(x, y - 0.9, z - 0.1);
-        this.getLeftPort = () => P3(this.topLeft.x, this.topLeft.y, this.topLeft.z - 0.4);
+        this.color = color;
+        this.topLeft = P3(x, y - 0.1, z);
+        this.bottomLeft = P3(x, y - 0.1, z - 1);
+        this.bottomRight = P3(x, y - 0.9, z -1);
+        this.topRight = P3(x, y - 0.9, z);
+        this.getLeftPort = () => P3(this.topLeft.x, this.topLeft.y, this.topLeft.z - 0.5);
         this.getRightPort = () => P3(this.topRight.x, this.topRight.y, this.topRight.z - 0.5);
     }
     addOp(op){
@@ -115,18 +116,20 @@ class NeedleCell {
     }
    
     render(grid){
-        grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight,  this.opNames);
-        var lines = this.ops.map(op => op.getStroke(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight,));
+        grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight,  this.opNames, this.color);
+        var lines = this.ops.map(op => op.getStroke(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight));
         var temp = lines.flat(1);
-        temp.map(line => grid.addLine(line))
+        temp.map(line => grid.addLine(line, this.color))
     }
 
 }
 class Carrier {
-    constructor(){
+    constructor(backIndex, color){
         const origin = () => P3(0, 0, 0);
         this.carrierLocation = origin;
         this.yarnCrossings = [];
+        this.backIndex = backIndex;
+        this.color = color
     }
     addCrossing(p1, p2){
         this.yarnCrossings.push({
@@ -141,7 +144,16 @@ class Carrier {
         return this.carrierLocation;
     } 
     render(grid){
-        this.yarnCrossings.forEach(crossing => grid.addLine([crossing.p1(), crossing.p2()]));
+        this.yarnCrossings.forEach(crossing => {
+            var c1 = crossing.p1();
+            var c2 = crossing.p2();
+            var color = LIGHTCOLOR;
+            console.log(c1.x ,  c2.x , this.backIndex);
+            if(c1.x == this.backIndex + 0.5 && c2.x == this.backIndex + 0.5){
+                color = DARKCOLOR;
+            }
+            grid.addLine([crossing.p1(), crossing.p2()], color)
+        });
     }
 }
 class Machine {
@@ -154,6 +166,7 @@ class Machine {
         this.frontbed = {};
         this.backbed = {};
         this.styles = {};
+        this.backIndex = -0.75;
 
     }
     setCarriers (carriers){
@@ -185,20 +198,18 @@ class Machine {
         this.ops.push(op);
     }
     runMachine(){
-
         for(var i = 0; i < this.ops.length; i++){
             var op = this.ops[i];
             if(op.needleOp){
                 if(op.needle.bed === 'f' || op.needle.bed === 'fs'){
-                
-                    this.frontbed[op.needle.number] = new Needle(op.needle.number, 0);
+                    this.frontbed[op.needle.number] = new Needle(op.needle.number, 0, LIGHTCOLOR);
 
                 } else{
-                    this.backbed[op.needle.number] = new Needle(op.needle.number, -1);
+                    this.backbed[op.needle.number] = new Needle(op.needle.number, this.backIndex, DARKCOLOR);
                 }
             }
         }
-        var carrier = new Carrier(this.ctx, this.grid);
+        var carrier = new Carrier(this.backIndex, LIGHTCOLOR);
         var cell = null;
         for(var i = 0; i < this.ops.length; i++){
             var op = this.ops[i];
@@ -226,15 +237,17 @@ class Machine {
 
     }
     renderMachine(){
-        this.carriers.forEach(carrier => carrier.render(this.grid));
-        for (let needle in this.frontbed) {
-            this.frontbed[needle].render(this.grid);
-            this.frontbed[needle].renderStack(this.grid);
-        }
+        
+        
         for (let needle in this.backbed) {
             this.backbed[needle].render(this.grid);
             this.backbed[needle].renderStack(this.grid);
         }
+        for (let needle in this.frontbed) {
+            this.frontbed[needle].render(this.grid);
+            this.frontbed[needle].renderStack(this.grid);
+        }
+        this.carriers.forEach(carrier => carrier.render(this.grid));
         this.grid.render();
     }
 
@@ -288,8 +301,8 @@ class Tuck extends Operator {
     getStroke(topLeft, bottomLeft, bottomRight, topRight){
         var width = Math.abs(bottomRight.y - bottomLeft.y);
         var height = Math.abs(bottomRight.z - topRight.z);
-        var wGap = width * 0.2;
-        var hGap = height * 0.3;
+        var wGap = width * 0.15;
+        var hGap = height * 0.4;
         var midTop = pointAverage(topLeft, topRight);
         var midLeft = pointAverage(topLeft, bottomLeft);
         var midRight = pointAverage(bottomRight, topRight);
@@ -436,9 +449,12 @@ class Grid {
  
 
     }
-    addLine(vertices){
+    addLine(vertices, color=null){
 
         var randomColor = "#" + Math.floor(Math.random()*16777215).toString(16);
+        if(color != null){
+            randomColor = color;
+        }
         this.linesToRender.push({
             vertices: vertices.map(point => P3(point.x * this.unitWidth, point.y* this.unitWidth, point.z* this.unitWidth)),
             fill: randomColor,
@@ -447,10 +463,13 @@ class Grid {
     }
     
    
-    Rect(topLeft, bottomLeft, bottomRight, topRight, text="default"){
+    Rect(topLeft, bottomLeft, bottomRight, topRight, text="default", color=null){
         const scalePoint = (point) => ({x: point.x * this.unitWidth,y: point.y * this.unitWidth,z: point.z * this.unitWidth});
         
         var randomColor = "#" + Math.floor(Math.random()*16777215).toString(16);
+        // if(color != null){
+        //     randomColor = color;
+        // }
         this.squaresToRender.push({
             vertices: [scalePoint(topLeft),scalePoint(bottomLeft),scalePoint(bottomRight),scalePoint(topRight), scalePoint(topLeft) ],
             fill: randomColor,
@@ -465,7 +484,7 @@ class Grid {
 
         this.squaresToRender.forEach(square => {
             this.ctx.fillStyle = square.fill;
-            this.ctx.globalAlpha = 0.4;
+            this.ctx.globalAlpha = 0.2;
 
             this.ctx.strokeStyle = square.fill;
             this.ctx.lineWidth = 1;
@@ -487,12 +506,11 @@ class Grid {
         this.linesToRender.forEach((line, index) => {
             // this.ctx.globalAlpha = 0.0;
             this.ctx.strokeStyle = line.fill;
-            this.ctx.lineWidth = 1;
+            this.ctx.lineWidth = 2;
             this.ctx.beginPath();
             const projVertices = line.vertices.map(vertex => axoProjMat.project(vertex));
             projVertices.forEach((vertex, index) => {
-                // this.ctx.arc(vertex.x , vertex.y, 2, 0, 2 * Math.PI, false)
-                this.ctx.lineTo(vertex.x , vertex.y, 2, 0, 2 * Math.PI, false)
+                this.ctx.lineTo(vertex.x , vertex.y)
                 // this.ctx.strokeText(index.toString(), vertex.x, vertex.y);
             });
             // ctx.closePath();
