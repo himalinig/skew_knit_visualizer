@@ -114,6 +114,12 @@ class NeedleCell {
         this.topLeft.z -= 1;
         this.topRight.z -= 1;
     }
+    push(val){
+        this.bottomRight.z += val;
+        this.bottomLeft.z += val;
+        this.topLeft.z += val;
+        this.topRight.z += val;
+    }
    
     render(grid){
         grid.Rect(this.topLeft, this.bottomLeft, this.bottomRight, this.topRight,  this.opNames, this.color);
@@ -129,16 +135,20 @@ class Carrier {
         this.carrierLocation = origin;
         this.yarnCrossings = [];
         this.backIndex = backIndex;
-        this.color = color
+        this.color = color;
+        this.cells = [];
     }
     addCrossing(p1, p2){
         this.yarnCrossings.push({
-            p1: p1, 
+            p1: p1,
             p2: p2
         });
     }
     updateCarrierLocation(location){
         this.carrierLocation = location;
+    }
+    appendCell(cell){
+        this.cells.push(cell);
     }
     getCarrierLocation(){
         return this.carrierLocation;
@@ -203,7 +213,6 @@ class Machine {
             if(op.needleOp){
                 if(op.needle.bed === 'f' || op.needle.bed === 'fs'){
                     this.frontbed[op.needle.number] = new Needle(op.needle.number, 0, LIGHTCOLOR);
-
                 } else{
                     this.backbed[op.needle.number] = new Needle(op.needle.number, this.backIndex, DARKCOLOR);
                 }
@@ -216,7 +225,7 @@ class Machine {
             
             if(op.needleOp){
                 if(op.needle.bed === 'f' || op.needle.bed === 'fs'){
-                    cell = this.frontbed[op.needle.number].addOp(op );
+                    cell = this.frontbed[op.needle.number].addOp(op);
                 }
                 else{
                     cell = this.backbed[op.needle.number].addOp(op);
@@ -224,16 +233,69 @@ class Machine {
                 if(op.direction == '-'){
                     carrier.addCrossing(carrier.getCarrierLocation(), cell.getLeftPort);
                     carrier.updateCarrierLocation(cell.getRightPort);
+                    carrier.appendCell({
+                        cell: cell,
+                        port: cell.getRightPort
+                    })
                 } else {
                     carrier.addCrossing(carrier.getCarrierLocation(), cell.getRightPort);
                     carrier.updateCarrierLocation(cell.getLeftPort);
+                    carrier.appendCell({
+                        cell: cell,
+                        port: cell.getLeftPort
+                    })
 
                 }
             }
-            
-
         }
         this.carriers.push(carrier);
+
+    }
+    step() {
+        //every stitch tries to move to minimize port y-offsets:
+        var carrier = this.carriers[0];
+        for(var i = 1; i< carrier.cells.length; i++){
+            var c1 = carrier.cells[i - 1];
+            var c2 = carrier.cells[i];
+            let dz = 0;
+            var c1port = c1.port();
+            var c2port = c2.port();
+            dz = c2port.z - c1port.z;
+            console.log(c1.port(), c2.port());
+            if(dz != 0){
+                console.log(dz);
+            }
+            c1.cell.push(dz * 0.5);
+            console.log(c1.port(), c2.port());
+        }
+        
+            
+        
+        //but also (stitch) columns enforce collision:
+        const doNeedles = (needles) => {
+            for (let column of Object.keys(needles)) {
+                var needle = needles[column];
+                var cells = needle.cells;
+                //pin last stitch to the top of the column in stitch columns:
+                //shove stitches apart:
+                for (let i = cells.length - 1; i >= 1; --i) {
+                    const above = cells[i];
+                    const below = cells[i - 1];
+                    const abovePort = above.getLeftPort();
+                    const belowPort = below.getLeftPort();
+                    
+                    const gap = abovePort.z - belowPort.z;
+                    if (gap < 1) {
+                        above.push( 0.5 * gap);
+                        below.push( -0.5 * gap);
+                    }
+                }
+            }
+        };
+        // for (let iter = 0; iter < 10; ++iter) {
+        //     doNeedles(this.backbed);
+        //     doNeedles(this.frontbed);
+        // }
 
     }
     renderMachine(){
@@ -490,10 +552,10 @@ class Grid {
             this.ctx.lineWidth = 1;
             this.ctx.beginPath();
             const projVertices = square.vertices.map(vertex => axoProjMat.project(vertex));
-            projVertices.forEach((vertex, index) => {
-                this.ctx.lineTo(vertex.x , vertex.y)
-                // this.ctx.strokeText(index.toString(), vertex.x , vertex.y)
-            });
+            // projVertices.forEach((vertex, index) => {
+            //     this.ctx.lineTo(vertex.x , vertex.y)
+            //     // this.ctx.strokeText(index.toString(), vertex.x , vertex.y)
+            // });
             
             this.ctx.stroke();
             this.ctx.fill();
@@ -558,5 +620,6 @@ var text = document.createTextNode(knitout_example);
 paragraph.appendChild(text);
 
 machine.runMachine();
+machine.step();
 machine.renderMachine();
 
